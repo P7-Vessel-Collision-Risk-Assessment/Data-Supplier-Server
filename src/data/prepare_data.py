@@ -1,82 +1,3 @@
-# import os
-# import pandas as pd
-# import numpy as np
-# from pandas.io.parsers import TextFileReader
-# import argparse
-
-# CHUNK_SIZE = 10**6
-
-
-# def load_data(path: str) -> TextFileReader:
-#     if not os.path.exists(path):
-#         raise FileNotFoundError(f"File not found: {path}")
-#     return pd.read_csv(path, chunksize=CHUNK_SIZE)
-
-
-# def cog_to_xy(cog: float) -> tuple[float, float]:
-#     # TODO: Use UTM coordinats
-
-#     x = np.sin(np.radians(cog))
-#     y = np.cos(np.radians(cog))
-#     return x, y
-
-
-# # Group data by MMSI and save to a new file
-# def group_data(data: TextFileReader, dir: str):
-#     os.makedirs(dir, exist_ok=True)
-#     for chunk in data:
-#         chunk = chunk[
-#             [
-#                 "# Timestamp",
-#                 "Type of mobile",
-#                 "MMSI",
-#                 "Latitude",
-#                 "Longitude",
-#                 "SOG",
-#                 "COG",
-#                 "Heading",
-#                 "Width",
-#                 "Length",
-#             ]
-#         ].rename(columns={"# Timestamp": "Timestamp"})
-#         chunk.columns = chunk.columns.str.lower()
-
-#         grouped = chunk.groupby("mmsi")
-
-#         # Convert COG to x, y
-#         chunk["cog_x"], chunk["cog_y"] = zip(*chunk["cog"].map(cog_to_xy))
-
-#         for name, group in grouped:
-#             print(f"Grouping MMSI: {name}")
-#             group = group.drop_duplicates()
-#             if os.path.exists(f"{dir}/{name}.feather"):
-
-#                 combined_data = pd.read_feather(f"{dir}/{name}.feather")
-
-#                 combined_data = pd.concat([combined_data, group])
-
-#                 combined_data.to_feather(
-#                     f"{dir}/{name}.feather",
-#                 )
-
-#                 del combined_data
-
-#             else:
-#                 group.to_feather(f"{dir}/{name}.feather")
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("path", help="Path to the AIS data CSV file")
-#     parser.add_argument(
-#         "--output-dir", default="data/mmsi/", help="Output directory for grouped data"
-#     )
-#     args = parser.parse_args()
-#     data = load_data(args.path)
-#     group_data(data, args.output_dir)
-#     print(f"Data '{args.path}' grouped by MMSI and saved to '{args.output_dir}'")
-
-
 import os
 import pandas as pd
 import numpy as np
@@ -155,8 +76,6 @@ if __name__ == "__main__":
         "--output-dir", default="data/mmsi2/", help="Output directory for grouped data"
     )
     args = parser.parse_args()
-
-    # Count total number of chunks
 
     # Load data and process with progress bar
     data = load_data(args.path)

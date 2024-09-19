@@ -14,13 +14,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 async def waypoints_generator():
-    waypoints = open('waypoints.json')
-    waypoints = json.load(waypoints)
-    for waypoint in waypoints[0: 10]:
-        data = json.dumps(waypoint)
+    for i in range(5000):
+        data = {
+            "lat": 50 + i,
+            "lng": 20 - i,
+        }
+        data = json.dumps(data)
         yield f"event: locationUpdate\ndata: {data}\n\n"
         await sleep(1)
+
 
 @app.get("/get-waypoints")
 async def root():
