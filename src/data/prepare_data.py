@@ -73,7 +73,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="Path to the AIS data CSV file")
     parser.add_argument(
-        "--output-dir", default="data/mmsi2/", help="Output directory for grouped data"
+        "--output-dir", default="data/mmsi/", help="Output directory for grouped data"
     )
     args = parser.parse_args()
 
