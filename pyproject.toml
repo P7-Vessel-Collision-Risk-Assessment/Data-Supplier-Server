@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "vcra-server"
+description = "VCRA"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "pandas",
+    "numpy",
+    "requests",
+    "beautifulsoup4",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "matplotlib",
+]
+test = ["pytest", "mypy", "ruff"]
+all = [
+    "mypy",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:tensorboard",
+    "ignore::UserWarning:gym",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+follow_imports = "silent"
+show_error_codes = true
+
+[tool.ruff]
+line-length = 127
