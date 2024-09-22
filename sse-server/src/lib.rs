@@ -10,7 +10,7 @@ pub async extern "C" fn start_sse_server() {
     let address = "127.0.0.1:8080";
 
     let listener = TcpListener::bind(address).await.unwrap();
-    println!("SSE Server Listening on {address}");
+    println!("SSE Server Listening on http://{address}");
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
 
     let shutdown_signal = async move {
@@ -51,7 +51,7 @@ async fn handle_client(mut stream: TcpStream) -> tokio::io::Result<()> {
     let mut reader = BufReader::new(&mut stream);
     let mut buf = String::new();
     reader.read_line(&mut buf).await?;
-    if buf.starts_with("GET /events") {
+    if buf.starts_with("GET /") {
         stream.write_all(b"HTTP/1.1 200 OK\r\n").await?;
         stream
             .write_all(b"Content-Type: text/event-stream\r\n")
@@ -60,9 +60,11 @@ async fn handle_client(mut stream: TcpStream) -> tokio::io::Result<()> {
         stream.write_all(b"Connection: keep-alive\r\n\r\n").await?;
         stream.flush().await?;
 
-        let test = "Hej";
+        let mut test = 0;
 
         loop {
+            test += 1;
+
             let data = format!("data: {}\n\n", test);
             stream.write_all(data.as_bytes()).await?;
             stream.flush().await?;
