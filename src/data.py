@@ -47,7 +47,9 @@ def build_trajectories(data: TextFileReader):
 
     data[cols] = scaler.fit_transform(data[cols])
 
-    data = trajectory_to_segments(data)
+    # data = trajectory_to_segments(data)
+
+    data = np.array(data[['latitude', 'longitude', 'sog', 'cog']].values)
 
     return data
 

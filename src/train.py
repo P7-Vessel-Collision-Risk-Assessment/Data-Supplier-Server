@@ -5,27 +5,34 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
-from torch.nn.utils.rnn import pad_sequence
-
 from model import VRAE
 
 class TrajectoryDataset(Dataset):
     def __init__(self, data_dir):
         self.data = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('npy')]
-        self.trajectories = []
-
-        # Load each vessel's data and flatten the trajectory dimension
-        for file in self.data:
-            vessel_data = np.load(file)  # Load data in shape [trajectory_idx, trajectory_length, trajectory_features]
-            for traj in vessel_data:
-                self.trajectories.append(traj)
 
     def __len__(self):
-        return len(self.trajectories)
+        return len(self.data)
         
     def __getitem__(self, idx):
-        trajectory = self.trajectories[idx]
-        return torch.tensor(trajectory, dtype=torch.float32) 
+        data = np.load(self.data[idx], allow_pickle=True)
+        # print(data)
+        # print(data.shape)
+        return torch.tensor(data, dtype=torch.float32), data.shape
+
+def pad_collate_fn(batch):
+    # Find the maximum length in the batch
+    max_len = max([item[0].shape[0] for item in batch])
+    
+    # Pad all tensors to the maximum length
+    padded_batch = []
+    for item in batch:
+        tensor, shape = item
+        pad_size = max_len - tensor.shape[0]
+        padded_tensor = torch.nn.functional.pad(tensor, (0, 0, 0, pad_size), mode='constant', value=0)
+        padded_batch.append(padded_tensor)
+    
+    return torch.stack(padded_batch, dim=0)
 
 def loss_function(recon_x, x, mu, logvar):
     # Reconstruction loss (MSE)
@@ -42,7 +49,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Model hyperparameters
 input_size = 4  # Number of features in input (lat, lng, sog, cog_x, cog_y)
 hidden_size = 50
-latent_size = 50
+latent_size = 20
 output_size = 4
 encode_layers = 3
 decode_layers = 2
@@ -54,7 +61,7 @@ learning_rate = 3e-4
 data_dir = 'data/trajectories'
 dataset = TrajectoryDataset(data_dir)
 
-dataloader = DataLoader(dataset, batch_size=batch_size)
+dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=pad_collate_fn)
 
 # Initialize the model
 model = VRAE(input_size, hidden_size, latent_size, output_size, encode_layers, decode_layers).to(device)
