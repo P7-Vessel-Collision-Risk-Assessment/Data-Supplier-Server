@@ -32,7 +32,6 @@ def download_data(url: str, dir: str):
         unit_scale=True,
         unit_divisor=1024,
         desc=f"Downloading {url.split('/')[-1]}",
-        leave=False,
     )
 
     # Write to a BytesIO buffer
@@ -50,6 +49,8 @@ def download_data(url: str, dir: str):
         with zipfile.ZipFile(buffer) as z:
             z.extractall(dir)
 
+        print("Data extracted")
+
 
 def get_latest_data_url():
     response = requests.get(BASE_URL)
@@ -59,7 +60,7 @@ def get_latest_data_url():
 
     links = [BASE_URL + link["href"] for link in links if link["href"].endswith(".zip")]
     print(f"Found {len(links)} links")
-    return links[-1]
+    return links[-2]
 
 
 if __name__ == "__main__":

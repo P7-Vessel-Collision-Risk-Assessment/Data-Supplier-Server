@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-from data import reader
+from data.reader import reader
 
 if __name__ == "__main__":
     data = reader("data/mmsi")
@@ -38,4 +38,3 @@ if __name__ == "__main__":
     # plt.ylabel("lng")
     # plt.legend()
     # plt.show()
-

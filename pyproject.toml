@@ -16,7 +16,8 @@ dependencies = [
     "beautifulsoup4",
     "tqdm",
     "pyarrow",
-    "torch"
+    "torch",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
@@ -29,11 +30,6 @@ all = [
     "ruff",
 ]
 
-[tool.pytest.ini_options]
-filterwarnings = [
-    "ignore::DeprecationWarning:tensorboard",
-    "ignore::UserWarning:gym",
-]
 
 [tool.mypy]
 ignore_missing_imports = true
