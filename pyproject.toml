@@ -16,6 +16,7 @@ dependencies = [
     "beautifulsoup4",
     "tqdm",
     "pyarrow",
+    "torch"
 ]
 
 [project.optional-dependencies]

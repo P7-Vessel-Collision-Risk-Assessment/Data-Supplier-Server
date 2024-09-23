@@ -88,26 +88,26 @@ for epoch in range(num_epochs):
 
     print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 
-model.eval()
-with torch.no_grad():
+# model.eval()
+# with torch.no_grad():
 
-    batch = np.load("data/trajectories/211534760.npy") 
-    batch = torch.tensor(batch, dtype=torch.float32)
-    batch = batch.to(device)
-    # batch = next(iter(dataloader))
-    # batch = batch.to(device)
+#     batch = np.load("data/trajectories/211534760.npy") 
+#     batch = torch.tensor(batch, dtype=torch.float32)
+#     batch = batch.to(device)
+#     # batch = next(iter(dataloader))
+#     # batch = batch.to(device)
 
-    recon_data, mu, logvar = model(batch)
+#     recon_data, mu, logvar = model(batch)
 
-    batch = batch.cpu().numpy().reshape(-1, batch.shape[-1])
-    recon_data = recon_data.cpu().numpy().reshape(-1, batch.shape[-1])
+#     batch = batch.cpu().numpy().reshape(-1, batch.shape[-1])
+#     recon_data = recon_data.cpu().numpy().reshape(-1, batch.shape[-1])
 
-    plt.figure(figsize=(8,8))
+#     plt.figure(figsize=(8,8))
 
-    plt.scatter(batch[:,0], batch[:,1], color='blue', label="Original")
-    plt.scatter(recon_data[:,0], recon_data[:,1], color='green', label="Reconstructed")
+#     plt.scatter(batch[:,0], batch[:,1], color='blue', label="Original")
+#     plt.scatter(recon_data[:,0], recon_data[:,1], color='green', label="Reconstructed")
 
-    plt.xlabel("lat")
-    plt.ylabel("lng")
-    plt.legend()
-    plt.show()
+#     plt.xlabel("lat")
+#     plt.ylabel("lng")
+#     plt.legend()
+#     plt.show()

@@ -29,7 +29,7 @@ def build_trajectories(data: TextFileReader):
 
     data['timestamp'] = pd.to_datetime(data['timestamp'], format='%d/%m/%Y %H:%M:%S')
 
-    cols = ['latitude', 'longitude', 'sog', 'cog']
+    cols = ['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']
 
     data = data.infer_objects()
 
@@ -100,10 +100,10 @@ def group_data(data: TextFileReader, dir: str):
 
         chunk = chunk[chunk['Type of mobile'] == 'Class A']
         
+        chunk.columns = chunk.columns.str.lower()   
+
         chunk["cog_x"], chunk["cog_y"] = zip(*chunk["cog"].map(cog_to_xy))
-        
-        chunk.columns = chunk.columns.str.lower()       
-        
+         
          # Group by MMSI (vessel identifier)
         grouped = chunk.groupby('mmsi')
 
