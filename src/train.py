@@ -47,10 +47,10 @@ def loss_function(recon_x, x, mu, logvar):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Model hyperparameters
-input_size = 4  # Number of features in input (lat, lng, sog, cog_x, cog_y)
+input_size = 5  # Number of features in input (lat, lng, sog, cog_x, cog_y)
 hidden_size = 50
 latent_size = 20
-output_size = 4
+output_size = 5
 encode_layers = 3
 decode_layers = 2
 

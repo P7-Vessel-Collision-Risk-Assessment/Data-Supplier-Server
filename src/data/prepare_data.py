@@ -14,6 +14,11 @@ CHUNK_SIZE = 10**6
 def count_lines(path: str) -> int:
     return int(subprocess.check_output(["wc", "-l", path]).split()[0])
 
+def cog_to_xy(cog: float) -> tuple[float, float]:
+    x = np.sin(np.radians(cog))
+    y = np.cos(np.radians(cog))
+    return x, y
+
 def load_data(path: str) -> TextFileReader:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
@@ -49,7 +54,7 @@ def build_trajectories(data: TextFileReader):
 
     # data = trajectory_to_segments(data)
 
-    data = np.array(data[['latitude', 'longitude', 'sog', 'cog']].values)
+    data = np.array(data[['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']].values)
 
     return data
 
@@ -63,7 +68,7 @@ def trajectory_to_segments(df, segment_length=30):
     for start in range(0, len(df) - segment_length + 1, segment_length):
         segment = df.iloc[start:start + segment_length]
         if len(segment) == segment_length:
-            segments.append(segment[['latitude', 'longitude', 'sog', 'cog']].values)
+            segments.append(segment[['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']].values)
 
     if len(segments) == 0:
         return None
@@ -92,7 +97,11 @@ def group_data(data: TextFileReader, dir: str):
                 "Length"
             ]
         ].rename(columns={"# Timestamp": "Timestamp"})
+
         chunk = chunk[chunk['Type of mobile'] == 'Class A']
+        
+        chunk["cog_x"], chunk["cog_y"] = zip(*chunk["cog"].map(cog_to_xy))
+        
         chunk.columns = chunk.columns.str.lower()       
         
          # Group by MMSI (vessel identifier)
