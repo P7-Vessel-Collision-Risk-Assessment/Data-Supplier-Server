@@ -2,12 +2,10 @@ import argparse
 import subprocess
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
-from pandas.io.parsers import TextFileReader
-import pandas as pd
+import polars as pl
 import os
 import numpy as np
-
-pd.options.mode.chained_assignment = None
+from polars.io.csv import BatchedCsvReader
 
 CHUNK_SIZE = 10**6
 
@@ -19,108 +17,103 @@ def cog_to_xy(cog: float) -> tuple[float, float]:
     y = np.cos(np.radians(cog))
     return x, y
 
-def load_data(path: str) -> TextFileReader:
+def load_data(path: str) -> pl.DataFrame:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
-    return pd.read_csv(path, chunksize=CHUNK_SIZE)
+    return pl.read_csv_batched(path, batch_size=CHUNK_SIZE, has_header=True, n_threads=4)
 
-def build_trajectories(data: TextFileReader):
-    data = data.drop_duplicates()
+def build_trajectories(data: pl.DataFrame):
+    data = data.unique(subset=None, keep="first")
 
-    data['timestamp'] = pd.to_datetime(data['timestamp'], format='%d/%m/%Y %H:%M:%S')
+    # Convert timestamp column to datetime
+    data = data.with_columns([
+        pl.col("timestamp").str.strptime(pl.Datetime, fmt="%d/%m/%Y %H:%M:%S").alias("timestamp")
+    ])
 
     cols = ['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']
 
-    data = data.infer_objects()
-
-    # Normalize columns 
-    data.dropna(subset=cols, inplace=True)
+    # Drop rows with NaN in required columns
+    data = data.drop_nulls(subset=cols)
 
     # Return if dataframe is empty after removing rows with NaN values
-    if data.empty:
+    if data.height == 0:
         return None
 
-    data.set_index('timestamp', inplace=True)
+    # Resample at 1-minute intervals and interpolate
+    data = data.sort("timestamp").group_by_dynamic(
+        "timestamp", every="1m", closed="left"
+    ).agg([pl.col(cols).mean().interpolate()])
 
-    # Resample at 1-minute intervals and interpolate. 
-    # A lot of cases where we get way worse density, maybe there are better ways to do the interpolation?
-    data = data.resample('1min').mean(numeric_only=True).interpolate(method = 'linear')
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # normalized_cols = scaler.fit_transform(data.select(cols).to_numpy())
 
-    data.reset_index(inplace=True)
+    # Convert normalized columns back to DataFrame and return
+    # data = data.with_columns([
+    #     pl.Series(cols[i], normalized_cols[:, i]) for i in range(len(cols))
+    # ])
 
-    scaler = MinMaxScaler(feature_range=(-1, 1))
+    return data.select(["latitude", "longitude", "sog", "cog_x", "cog_y"]).to_numpy()
 
-    data[cols] = scaler.fit_transform(data[cols])
-
-    # data = trajectory_to_segments(data)
-
-    data = np.array(data[['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']].values)
-
-    return data
-
-def trajectory_to_segments(df, segment_length=30):
-    # Ensure we have a 'Timestamp' as a datetime column for splitting
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    
+def trajectory_to_segments(df: pl.DataFrame, segment_length=30):
     segments = []
 
-    # Iterate over each segment and store it if it's 30 minutes long
+    # Iterate over each segment and store if it is 30 rows long
     for start in range(0, len(df) - segment_length + 1, segment_length):
-        segment = df.iloc[start:start + segment_length]
-        if len(segment) == segment_length:
-            segments.append(segment[['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']].values)
+        segment = df.slice(start, segment_length)
+        if segment.height == segment_length:
+            segments.append(segment.select(["latitude", "longitude", "sog", "cog_x", "cog_y"]).to_numpy())
 
     if len(segments) == 0:
         return None
 
     return np.array(segments)
 
-def group_data(data: TextFileReader, dir: str):
+def group_data(data: BatchedCsvReader, dir: str):
     os.makedirs(dir, exist_ok=True)
 
     total_chunks = count_lines(args.path) // CHUNK_SIZE
 
     pbar = tqdm(total=total_chunks, desc="Processing chunks")
-    
-    for chunk in data:
-        chunk = chunk[
-            [
-                "# Timestamp", 
-                "Type of mobile", 
-                "MMSI", 
-                "Latitude", 
-                "Longitude", 
-                "SOG", 
-                "COG", 
-                "Heading",
-                "Width", 
-                "Length"
-            ]
-        ].rename(columns={"# Timestamp": "Timestamp"})
 
-        chunk = chunk[chunk['Type of mobile'] == 'Class A']
-        
-        chunk.columns = chunk.columns.str.lower()   
+    for chunk in data.next_batches(total_chunks):
+        chunk = chunk.select([
+            "# Timestamp", "Type of mobile", "MMSI", "Latitude", "Longitude", "SOG", "COG", "Heading", "Width", "Length"
+        ]).rename({"# Timestamp": "timestamp"})
 
-        chunk["cog_x"], chunk["cog_y"] = zip(*chunk["cog"].map(cog_to_xy))
-         
-         # Group by MMSI (vessel identifier)
-        grouped = chunk.groupby('mmsi')
+        chunk.columns = [x.lower() for x in chunk.columns]
+
+        chunk = chunk.filter(pl.col("type of mobile") == "Class A")
+
+        # Convert column names to lowercase
+        chunk = chunk.with_columns([pl.col(c).alias(c.lower()) for c in chunk.columns])
+
+        # Apply cog_to_xy function to generate cog_x and cog_y
+        chunk = chunk.with_columns([
+            pl.col("cog").map_elements(lambda cog: cog_to_xy(cog)[0], return_dtype=pl.Float32).alias("cog_x"),
+            pl.col("cog").map_elements(lambda cog: cog_to_xy(cog)[1], return_dtype=pl.Float32).alias("cog_y")
+        ])
+
+        chunk = chunk.drop("cog")
+
+        # Group by MMSI (vessel identifier)
+        grouped = chunk.group_by("mmsi")
 
         # Process each vessel's data
-        for name, group in grouped:
-            if os.path.exists(f"{dir}/{name}.feather"):
-                combined_data = pd.read_feather(f"{dir}/{name}.feather")
-                combined_data = pd.concat([combined_data, group])                
-                combined_data.to_feather(f"{dir}/{name}.feather")
-                del combined_data
+        for group in grouped:
+            name = group[0]
+            vessel_data = group[1]
+
+            file_path = f"{dir}/{name}.feather"
+
+            if os.path.exists(file_path):
+                with open(file_path, mode="a") as combined_data:
+                    vessel_data.write_ipc(combined_data)
             else:
-                group.to_feather(f"{dir}/{name}.feather")
+                vessel_data.write_ipc(file_path)
 
         pbar.update(1)
 
     pbar.close()
-
 
 def build_dataset(in_dir="data/mmsi", out_dir="data/trajectories"):
     if not os.path.exists(out_dir):
@@ -129,7 +122,7 @@ def build_dataset(in_dir="data/mmsi", out_dir="data/trajectories"):
     for filename in os.listdir(in_dir):
         if filename.endswith('.feather'):
             filepath = os.path.join(in_dir, filename)
-            data = pd.read_feather(filepath)
+            data = pl.read_ipc(filepath)
             trajectories = build_trajectories(data)
             if trajectories is not None:
                 out_filepath = os.path.join(out_dir, filename.split(".")[0])
@@ -146,7 +139,6 @@ if __name__ == "__main__":
     # Load data and process with progress bar
     data = load_data(args.path)
     group_data(data, args.output_dir)
-    build_dataset()
+    build_dataset
 
     print(f"Data '{args.path}' grouped by MMSI and saved to '{args.output_dir}'")
-

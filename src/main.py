@@ -3,11 +3,20 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
 from data import reader
+import polars as pl
+import datetime as dt
 
 if __name__ == "__main__":
-    data = reader("data/mmsi")
-    for df in data:
-        print(df)
+    
+    before = dt.datetime.now() 
+    data = pl.read_csv("data/aisdk-2024-09-11.csv")
+    after = dt.datetime.now()
+
+    print(after-before)
+
+    # data = reader("data/mmsi")
+    # for df in data:
+    #     print(df)
 
     # data = pd.read_feather('data/mmsi/211240870.feather')
 
@@ -16,7 +25,7 @@ if __name__ == "__main__":
     # print(data.shape)
 
     # pd.set_option('display.max_rows', None)
-    # pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_columns', None)
 
     # plt.figure(figsize=(9, 9))
 
