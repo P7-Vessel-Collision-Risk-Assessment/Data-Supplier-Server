@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import subprocess
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
@@ -12,15 +13,10 @@ CHUNK_SIZE = 10**6
 def count_lines(path: str) -> int:
     return int(subprocess.check_output(["wc", "-l", path]).split()[0])
 
-def cog_to_xy(cog: float) -> tuple[float, float]:
-    x = np.sin(np.radians(cog))
-    y = np.cos(np.radians(cog))
-    return x, y
-
-def load_data(path: str) -> pl.DataFrame:
+def load_data(path: str) -> pl.LazyFrame:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
-    return pl.read_csv_batched(path, batch_size=CHUNK_SIZE, has_header=True, n_threads=4)
+    return pl.scan_csv(path, with_column_names=lambda cols: [col.lower() for col in cols])
 
 def build_trajectories(data: pl.DataFrame):
     data = data.unique(subset=None, keep="first")
@@ -68,51 +64,33 @@ def trajectory_to_segments(df: pl.DataFrame, segment_length=30):
 
     return np.array(segments)
 
-def group_data(data: BatchedCsvReader, dir: str):
+def group_data(data: pl.LazyFrame, dir: str):
     os.makedirs(dir, exist_ok=True)
+    total_chunks = count_lines(args.path)
 
-    total_chunks = count_lines(args.path) // CHUNK_SIZE
-
-    pbar = tqdm(total=total_chunks, desc="Processing chunks")
-
-    for chunk in data.next_batches(total_chunks):
-        chunk = chunk.select([
-            "# Timestamp", "Type of mobile", "MMSI", "Latitude", "Longitude", "SOG", "COG", "Heading", "Width", "Length"
-        ]).rename({"# Timestamp": "timestamp"})
-
-        chunk.columns = [x.lower() for x in chunk.columns]
-
-        chunk = chunk.filter(pl.col("type of mobile") == "Class A")
-
-        # Convert column names to lowercase
-        chunk = chunk.with_columns([pl.col(c).alias(c.lower()) for c in chunk.columns])
-
-        # Apply cog_to_xy function to generate cog_x and cog_y
-        chunk = chunk.with_columns([
-            pl.col("cog").map_elements(lambda cog: cog_to_xy(cog)[0], return_dtype=pl.Float32).alias("cog_x"),
-            pl.col("cog").map_elements(lambda cog: cog_to_xy(cog)[1], return_dtype=pl.Float32).alias("cog_y")
+    data = (
+        data.rename({"# timestamp": "timestamp"})
+        .filter(pl.col("type of mobile") == "Class A")
+        .with_columns([
+            pl.col("cog").radians().sin().alias("cog_x"),
+            pl.col("cog").radians().cos().alias("cog_y")
         ])
+        .drop("cog").collect(Streaming=True)
+    )
 
-        chunk = chunk.drop("cog")
+    grouped_data = data.group_by("mmsi")
 
-        # Group by MMSI (vessel identifier)
-        grouped = chunk.group_by("mmsi")
+    # with pl.Config(tbl_cols=-1):
+        # data = data.collect()
+        # print(data)
+        # print(data.shape)
+    pbar = tqdm(total=2100, desc="Processing chunks")
+    vessel_data: pl.DataFrame
+    for name, vessel_data in grouped_data:
+        file_path = f"{dir}/{name[0]}.feather"
 
-        # Process each vessel's data
-        for group in grouped:
-            name = group[0]
-            vessel_data = group[1]
-
-            file_path = f"{dir}/{name}.feather"
-
-            if os.path.exists(file_path):
-                with open(file_path, mode="a") as combined_data:
-                    vessel_data.write_ipc(combined_data)
-            else:
-                vessel_data.write_ipc(file_path)
-
+        vessel_data.write_ipc(file_path)
         pbar.update(1)
-
     pbar.close()
 
 def build_dataset(in_dir="data/mmsi", out_dir="data/trajectories"):
@@ -139,6 +117,5 @@ if __name__ == "__main__":
     # Load data and process with progress bar
     data = load_data(args.path)
     group_data(data, args.output_dir)
-    build_dataset
 
     print(f"Data '{args.path}' grouped by MMSI and saved to '{args.output_dir}'")
