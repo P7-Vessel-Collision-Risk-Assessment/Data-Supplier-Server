@@ -23,7 +23,7 @@ def build_trajectories(data: pl.DataFrame):
 
     # Convert timestamp column to datetime
     data = data.with_columns([
-        pl.col("timestamp").str.strptime(pl.Datetime, fmt="%d/%m/%Y %H:%M:%S").alias("timestamp")
+        pl.col("timestamp").str.strptime(pl.Datetime, format="%d/%m/%Y %H:%M:%S").alias("timestamp")
     ])
 
     cols = ['latitude', 'longitude', 'sog', 'cog_x', 'cog_y']
@@ -38,7 +38,9 @@ def build_trajectories(data: pl.DataFrame):
     # Resample at 1-minute intervals and interpolate
     data = data.sort("timestamp").group_by_dynamic(
         "timestamp", every="1m", closed="left"
-    ).agg([pl.col(cols).mean().interpolate()])
+    ).agg([pl.col(cols).mean()]).with_columns([pl.col(col).interpolate() for col in cols])
+
+
 
     # scaler = MinMaxScaler(feature_range=(-1, 1))
     # normalized_cols = scaler.fit_transform(data.select(cols).to_numpy())
@@ -64,9 +66,8 @@ def trajectory_to_segments(df: pl.DataFrame, segment_length=30):
 
     return np.array(segments)
 
-def group_data(data: pl.LazyFrame, dir: str):
+def group_data_in_memory(data: pl.LazyFrame, dir: str):
     os.makedirs(dir, exist_ok=True)
-    total_chunks = count_lines(args.path)
 
     data = (
         data.rename({"# timestamp": "timestamp"})
@@ -75,22 +76,23 @@ def group_data(data: pl.LazyFrame, dir: str):
             pl.col("cog").radians().sin().alias("cog_x"),
             pl.col("cog").radians().cos().alias("cog_y")
         ])
-        .drop("cog").collect(Streaming=True)
+        .drop("cog")
+        .collect(streaming=True)
+        .group_by("mmsi")
     )
 
-    grouped_data = data.group_by("mmsi")
+    vessel_count = data.n_unique().count().to_numpy()[0][0]
 
-    # with pl.Config(tbl_cols=-1):
-        # data = data.collect()
-        # print(data)
-        # print(data.shape)
-    pbar = tqdm(total=2100, desc="Processing chunks")
-    vessel_data: pl.DataFrame
-    for name, vessel_data in grouped_data:
-        file_path = f"{dir}/{name[0]}.feather"
+    pbar = tqdm(total=vessel_count, desc="Processing chunks")
+    
+    vessel_data: pl.DataFrame  
+    for name, vessel_data in data:
+        file_path = f"{dir}/{name[0]}.feather"    
 
         vessel_data.write_ipc(file_path)
+
         pbar.update(1)
+    
     pbar.close()
 
 def build_dataset(in_dir="data/mmsi", out_dir="data/trajectories"):
@@ -116,6 +118,7 @@ if __name__ == "__main__":
 
     # Load data and process with progress bar
     data = load_data(args.path)
-    group_data(data, args.output_dir)
+    group_data_in_memory(data, args.output_dir)
+    build_dataset()
 
     print(f"Data '{args.path}' grouped by MMSI and saved to '{args.output_dir}'")
